@@ -42,10 +42,25 @@ function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-function isMeaningfulText(value: string, placeholder: string) {
+function countMeaningfulCharacters(value: string) {
+  const normalized = normalizeText(value)
+  const stripped = normalized.replace(/[\p{P}\p{S}\s]/gu, '')
+
+  return Array.from(stripped).length
+}
+
+function isMeaningfulText(value: string, placeholder: string, minimumLength = 2) {
   const normalized = normalizeText(value)
 
-  return normalized.length >= 4 && normalized !== normalizeText(placeholder)
+  return normalized !== normalizeText(placeholder) && countMeaningfulCharacters(normalized) >= minimumLength
+}
+
+function getScalarText(value: unknown) {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return normalizeText(String(value))
+  }
+
+  return ''
 }
 
 function extractText(node: MarkdownNode) {
@@ -91,7 +106,7 @@ export function validateSlidevHome(
     }
   }
 
-  const titleValue = typeof frontmatter.title === 'string' ? normalizeText(frontmatter.title) : ''
+  const titleValue = getScalarText(frontmatter.title)
   const layoutValue = typeof frontmatter.layout === 'string' ? normalizeText(frontmatter.layout) : ''
 
   const firstHeadingNode = firstSlideNodes.find(
@@ -104,7 +119,7 @@ export function validateSlidevHome(
     .filter(Boolean)
 
   const firstHeadingText = firstHeadingNode ? extractText(firstHeadingNode) : ''
-  const subtitleText = paragraphTexts.find(text => isMeaningfulText(text, task.placeholders.subtitle)) ?? ''
+  const subtitleText = paragraphTexts.find(text => isMeaningfulText(text, task.placeholders.subtitle, 6)) ?? ''
 
   const domHeadings = domSnapshot?.headings ?? []
   const domParagraphs = domSnapshot?.paragraphs ?? []
@@ -121,16 +136,16 @@ export function validateSlidevHome(
     createValidationItem(
       checkpointMap,
       'frontmatter-title',
-      isMeaningfulText(titleValue, task.placeholders.deckTitle),
-      isMeaningfulText(titleValue, task.placeholders.deckTitle)
+      isMeaningfulText(titleValue, task.placeholders.deckTitle, 2),
+      isMeaningfulText(titleValue, task.placeholders.deckTitle, 2)
         ? `演示标题已更新为「${titleValue}」。`
         : '请把 frontmatter.title 改成你自己的演示标题。',
     ),
     createValidationItem(
       checkpointMap,
       'first-slide-heading',
-      isMeaningfulText(firstHeadingText, task.placeholders.pageTitle),
-      isMeaningfulText(firstHeadingText, task.placeholders.pageTitle)
+      isMeaningfulText(firstHeadingText, task.placeholders.pageTitle, 2),
+      isMeaningfulText(firstHeadingText, task.placeholders.pageTitle, 2)
         ? `首页标题已更新为「${firstHeadingText}」。`
         : '请在第一页写一个一级标题，并替换掉占位文案。',
     ),
@@ -146,10 +161,10 @@ export function validateSlidevHome(
       checkpointMap,
       'preview-heading',
       domSnapshot
-        ? domHeadings.some(text => isMeaningfulText(text, task.placeholders.pageTitle))
+        ? domHeadings.some(text => isMeaningfulText(text, task.placeholders.pageTitle, 2))
         : false,
       domSnapshot
-        ? domHeadings.some(text => isMeaningfulText(text, task.placeholders.pageTitle))
+        ? domHeadings.some(text => isMeaningfulText(text, task.placeholders.pageTitle, 2))
             ? '预览里已经渲染出首页标题。'
             : '预览已启动，但还没有检测到有效标题。'
         : createPendingDomDetail(),
@@ -158,10 +173,10 @@ export function validateSlidevHome(
       checkpointMap,
       'preview-subtitle',
       domSnapshot
-        ? domParagraphs.some(text => isMeaningfulText(text, task.placeholders.subtitle))
+        ? domParagraphs.some(text => isMeaningfulText(text, task.placeholders.subtitle, 6))
         : false,
       domSnapshot
-        ? domParagraphs.some(text => isMeaningfulText(text, task.placeholders.subtitle))
+        ? domParagraphs.some(text => isMeaningfulText(text, task.placeholders.subtitle, 6))
             ? '预览里已经渲染出副标题段落。'
             : '预览已启动，但还没有检测到有效副标题。'
         : createPendingDomDetail(),

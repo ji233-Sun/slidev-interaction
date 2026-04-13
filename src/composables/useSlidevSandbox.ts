@@ -27,40 +27,31 @@ export interface SandboxLogEntry {
   timestamp: string
 }
 
-function createSandboxFiles(markdown: string): FileSystemTree {
-  return {
-    'package.json': {
-      file: {
-        contents: JSON.stringify(
-          {
-            name: 'slidev-playground',
-            private: true,
-            packageManager: 'pnpm@10.33.0',
-            type: 'module',
-            scripts: {
-              dev: `slidev --host 0.0.0.0 --port ${DEV_SERVER_PORT} --remote`,
-              build: 'slidev build',
-            },
-            devDependencies: {
-              '@slidev/cli': 'latest',
-              '@slidev/client': 'latest',
-              '@slidev/theme-default': 'latest',
-              vue: 'latest',
-            },
-          },
-          null,
-          2,
-        ),
+function createSandboxPackageJson() {
+  return JSON.stringify(
+    {
+      name: 'slidev-playground',
+      private: true,
+      packageManager: 'pnpm@10.33.0',
+      type: 'module',
+      scripts: {
+        dev: `slidev slides.md --bind 0.0.0.0 --port ${DEV_SERVER_PORT} --remote --log warn`,
+        build: 'slidev build',
+      },
+      devDependencies: {
+        '@slidev/cli': 'latest',
+        '@slidev/client': 'latest',
+        '@slidev/theme-default': 'latest',
+        vue: 'latest',
       },
     },
-    'slides.md': {
-      file: {
-        contents: markdown,
-      },
-    },
-    'global-bottom.vue': {
-      file: {
-        contents: `<script setup lang="ts">
+    null,
+    2,
+  )
+}
+
+function createGlobalBottomComponent() {
+  return `<script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useNav } from '@slidev/client'
 
@@ -136,7 +127,24 @@ onBeforeUnmount(() => {
   display: none;
 }
 </style>
-`,
+`
+}
+
+function createSandboxFiles(markdown: string): FileSystemTree {
+  return {
+    'package.json': {
+      file: {
+        contents: createSandboxPackageJson(),
+      },
+    },
+    'slides.md': {
+      file: {
+        contents: markdown,
+      },
+    },
+    'global-bottom.vue': {
+      file: {
+        contents: createGlobalBottomComponent(),
       },
     },
   }
@@ -154,12 +162,15 @@ export function useSlidevSandbox(markdown: Ref<string>) {
   const canUseWebContainer = typeof window !== 'undefined' && window.crossOriginIsolated
 
   const logs = ref<SandboxLogEntry[]>([])
+  const previewFrameKey = ref(0)
   const previewUrl = ref<string | null>(null)
   const status = ref<SandboxStatus>('idle')
   const errorMessage = ref<string | null>(null)
   const domSnapshot = ref<PreviewDomSnapshot | null>(null)
 
   let container: WebContainerInstance | null = null
+  let devProcess: WebContainerProcess | null = null
+  let dependenciesInstalled = false
   let startPromise: Promise<void> | null = null
   let syncTimer: number | null = null
   let projectMounted = false
@@ -198,6 +209,10 @@ export function useSlidevSandbox(markdown: Ref<string>) {
         timestamp: createTimestamp(),
       },
     ].slice(-LOG_LIMIT)
+  }
+
+  function refreshPreviewFrame() {
+    previewFrameKey.value += 1
   }
 
   function sanitizeTerminalChunk(chunk: string) {
@@ -245,6 +260,54 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     return 'info'
   }
 
+  function transformTerminalLine(source: SandboxLogSource, line: string) {
+    if (!line || SPINNER_PATTERN.test(line) || /^\++$/.test(line)) {
+      return null
+    }
+
+    if (line.startsWith('Progress:')) {
+      return null
+    }
+
+    if (line === 'dependencies:' || line === 'devDependencies:' || line === '.') {
+      return null
+    }
+
+    if (/^[├└│]/.test(line) || /^\+\s/.test(line)) {
+      return null
+    }
+
+    if (/^Packages:\s+\+\d+/.test(line)) {
+      return {
+        kind: 'info' as const,
+        message: '正在写入并链接依赖包...',
+      }
+    }
+
+    if (line.startsWith('WARN Issues with peer dependencies found')) {
+      return {
+        kind: 'info' as const,
+        message: '检测到 peer dependency 警告，当前预览通常不受影响。',
+      }
+    }
+
+    if (source === 'slidev' && line.startsWith('[oxc-parser] Downloading')) {
+      return {
+        kind: 'info' as const,
+        message: 'Slidev 首次运行，正在下载 oxc parser 运行时。',
+      }
+    }
+
+    if (line.startsWith('> slidev-playground@ dev') || line.startsWith('> slidev slides.md')) {
+      return null
+    }
+
+    return {
+      kind: detectLogKind(line),
+      message: line,
+    }
+  }
+
   function attachProcessOutput(process: WebContainerProcess, source: SandboxLogSource) {
     let bufferedOutput = ''
 
@@ -258,22 +321,24 @@ export function useSlidevSandbox(markdown: Ref<string>) {
 
           for (const segment of segments) {
             const line = normalizeTerminalLine(segment)
+            const transformed = transformTerminalLine(source, line)
 
-            if (!line || SPINNER_PATTERN.test(line)) {
+            if (!transformed) {
               continue
             }
 
-            appendLog(source, line, detectLogKind(line))
+            appendLog(source, transformed.message, transformed.kind)
           }
         },
         close() {
           const line = normalizeTerminalLine(bufferedOutput)
+          const transformed = transformTerminalLine(source, line)
 
-          if (!line || SPINNER_PATTERN.test(line)) {
+          if (!transformed) {
             return
           }
 
-          appendLog(source, line, detectLogKind(line))
+          appendLog(source, transformed.message, transformed.kind)
         },
       }),
     )
@@ -285,6 +350,37 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     }
 
     await container.fs.writeFile('/slides.md', value)
+  }
+
+  async function syncSandboxSupportFiles() {
+    if (!container) {
+      return
+    }
+
+    await container.fs.writeFile('/package.json', createSandboxPackageJson())
+    await container.fs.writeFile('/global-bottom.vue', createGlobalBottomComponent())
+  }
+
+  function watchDevProcess(process: WebContainerProcess) {
+    devProcess = process
+
+    void process.exit.then((exitCode) => {
+      if (devProcess !== process) {
+        return
+      }
+
+      devProcess = null
+
+      if (exitCode === 0) {
+        status.value = 'idle'
+        appendLog('system', 'Slidev dev server 已停止。')
+        return
+      }
+
+      status.value = 'error'
+      errorMessage.value = `Slidev dev server 异常退出（code ${exitCode}）。`
+      appendLog('system', errorMessage.value, 'error')
+    })
   }
 
   async function ensureStarted() {
@@ -326,24 +422,34 @@ export function useSlidevSandbox(markdown: Ref<string>) {
           projectMounted = true
           appendLog('system', '已挂载内置 Slidev 工程文件。', 'success')
         }
+        else {
+          await syncSandboxSupportFiles()
+          await syncSlideMarkdown(markdown.value)
+          appendLog('system', '已刷新沙箱配置文件。')
+        }
 
-        status.value = 'installing'
-        appendLog('system', '首次启动会在浏览器内安装 Slidev 依赖，请稍等。')
-        appendLog('pnpm', '$ pnpm install --reporter append-only --color never', 'command')
+        if (!dependenciesInstalled) {
+          status.value = 'installing'
+          appendLog('system', '首次启动会在浏览器内安装 Slidev 依赖，请稍等。')
+          appendLog('pnpm', '$ pnpm install --reporter=append-only --color=never', 'command')
 
-        const installProcess = await container.spawn('pnpm', ['install', '--reporter', 'append-only', '--color', 'never'])
-        attachProcessOutput(installProcess, 'pnpm')
+          const installProcess = await container.spawn('pnpm', ['install', '--reporter=append-only', '--color=never'])
+          attachProcessOutput(installProcess, 'pnpm')
 
-        const installExitCode = await installProcess.exit
+          const installExitCode = await installProcess.exit
 
-        if (installExitCode !== 0) {
-          throw new Error('pnpm install 执行失败。')
+          if (installExitCode !== 0) {
+            throw new Error('pnpm install 执行失败。')
+          }
+
+          dependenciesInstalled = true
         }
 
         appendLog('system', '依赖安装完成，正在启动 Slidev dev server。', 'success')
         appendLog('slidev', '$ pnpm dev', 'command')
-        const devProcess = await container.spawn('pnpm', ['dev'])
-        attachProcessOutput(devProcess, 'slidev')
+        const process = await container.spawn('pnpm', ['dev'])
+        attachProcessOutput(process, 'slidev')
+        watchDevProcess(process)
 
         await syncSlideMarkdown(markdown.value)
       }
@@ -397,6 +503,12 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     syncTimer = window.setTimeout(() => {
       void syncSlideMarkdown(value)
       appendLog('system', '已同步 slides.md 到 WebContainer。')
+      refreshPreviewFrame()
+
+      if (!devProcess && !isBusy.value) {
+        appendLog('system', '检测到 Slidev 进程未运行，正在尝试重启。')
+        void ensureStarted()
+      }
     }, 350)
   })
 
@@ -407,6 +519,7 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     errorMessage,
     isBusy,
     logs,
+    previewFrameKey,
     previewUrl,
     status,
   }

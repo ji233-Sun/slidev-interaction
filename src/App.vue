@@ -26,6 +26,7 @@ const {
   errorMessage,
   isBusy,
   logs,
+  previewFrameKey,
   previewUrl,
   status,
 } = useSlidevSandbox(content)
@@ -137,6 +138,7 @@ const completionPercent = computed(() => `${Math.round(validationReport.value.co
           :error-message="errorMessage"
           :is-busy="isBusy"
           :logs="logs"
+          :preview-frame-key="previewFrameKey"
           :preview-url="previewUrl"
           :status="status"
           @start="ensureStarted"

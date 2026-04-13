@@ -6,6 +6,7 @@ defineProps<{
   errorMessage: string | null
   isBusy: boolean
   logs: SandboxLogEntry[]
+  previewFrameKey: number
   previewUrl: string | null
   status: 'idle' | 'booting' | 'installing' | 'running' | 'error'
 }>()
@@ -49,6 +50,7 @@ const statusCopy = {
     <div class="preview-frame">
       <iframe
         v-if="previewUrl"
+        :key="previewFrameKey"
         :src="previewUrl"
         title="Slidev Preview"
       />
