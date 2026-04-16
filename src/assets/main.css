@@ -3,18 +3,31 @@
 html,
 body,
 #app {
+  height: 100%;
   min-height: 100%;
 }
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(77, 175, 124, 0.18), transparent 28%),
-    radial-gradient(circle at 85% 12%, rgba(125, 169, 255, 0.18), transparent 24%),
-    linear-gradient(180deg, #08111f 0%, #060b14 100%);
+    radial-gradient(circle at top left, rgba(163, 166, 255, 0.12), transparent 24%),
+    radial-gradient(circle at 85% 12%, rgba(169, 143, 253, 0.16), transparent 24%),
+    linear-gradient(180deg, #091122 0%, #040914 100%);
+  overflow: hidden;
 }
 
 #app {
   margin: 0 auto;
-  max-width: 1560px;
-  padding: 1.5rem;
+  max-width: 100%;
+  padding: 1rem;
+}
+
+@media (max-width: 1040px) {
+  body {
+    overflow: auto;
+  }
+
+  #app {
+    height: auto;
+    min-height: 100%;
+  }
 }

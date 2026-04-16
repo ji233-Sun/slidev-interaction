@@ -38,3 +38,4 @@ __screenshots__/
 # Vite
 *.timestamp-*-*.mjs
 .ace-tool/
+.playwright-mcp

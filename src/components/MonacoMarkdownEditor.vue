@@ -111,7 +111,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .monaco-editor-host {
-  min-height: 460px;
+  height: 100%;
+  min-height: 520px;
   width: 100%;
 }
 </style>

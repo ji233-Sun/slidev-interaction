@@ -7,13 +7,20 @@ defineProps<{
 </script>
 
 <template>
-  <section class="card checklist-card">
+  <section class="checklist-card">
     <div class="card-head">
       <div>
-        <p class="section-kicker">校验结果</p>
+        <p class="section-kicker">Validation</p>
         <h2>AST + DOM 双重检查</h2>
       </div>
-      <strong>{{ report.completedCount }}/{{ report.totalCount }}</strong>
+      <div class="score-chip">
+        <strong>{{ report.completedCount }}/{{ report.totalCount }}</strong>
+        <small>{{ Math.round(report.completionRatio * 100) }}%</small>
+      </div>
+    </div>
+
+    <div class="progress-track">
+      <span class="progress-fill" :style="{ width: `${Math.round(report.completionRatio * 100)}%` }" />
     </div>
 
     <ul class="checklist">
@@ -40,41 +47,75 @@ defineProps<{
 
 <style scoped>
 .checklist-card {
+  background: linear-gradient(180deg, rgba(15, 25, 48, 0.96), rgba(9, 16, 31, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1.25rem;
   display: grid;
   gap: 1rem;
+  padding: 1rem;
 }
 
 .card-head {
-  align-items: baseline;
+  align-items: start;
   display: flex;
-  justify-content: space-between;
   gap: 1rem;
-}
-
-.card-head strong {
-  color: var(--color-heading);
-  font-size: 1.3rem;
+  justify-content: space-between;
 }
 
 .section-kicker {
-  color: var(--color-muted);
-  font-size: 0.75rem;
+  color: var(--color-muted-strong);
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
   letter-spacing: 0.16em;
   margin-bottom: 0.35rem;
   text-transform: uppercase;
 }
 
+.card-head h2 {
+  color: var(--color-heading);
+  font-family: "Space Grotesk", "Avenir Next", sans-serif;
+  font-size: 1.1rem;
+}
+
+.score-chip {
+  align-items: end;
+  display: grid;
+  justify-items: end;
+}
+
+.score-chip strong {
+  color: var(--color-heading);
+  font-size: 1.2rem;
+}
+
+.score-chip small {
+  color: var(--color-muted);
+}
+
+.progress-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  height: 0.36rem;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dim));
+  display: block;
+  height: 100%;
+}
+
 .checklist {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.75rem;
   list-style: none;
   padding: 0;
 }
 
 .checklist-item {
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 0.95rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  padding: 0.95rem;
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -83,8 +124,8 @@ defineProps<{
 }
 
 .is-passed {
-  border-color: rgba(54, 179, 126, 0.55);
-  background: rgba(54, 179, 126, 0.08);
+  background: rgba(134, 242, 187, 0.08);
+  border-color: rgba(134, 242, 187, 0.28);
 }
 
 .is-pending {
@@ -109,7 +150,7 @@ defineProps<{
 }
 
 .is-pending .status-dot {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .item-copy {
@@ -140,10 +181,10 @@ defineProps<{
 }
 
 .source-tag {
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   color: var(--color-muted);
-  font-family: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.72rem;
   padding: 0.18rem 0.55rem;
 }
