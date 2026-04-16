@@ -1,51 +1,17 @@
-import { toString } from 'mdast-util-to-string'
-import remarkFrontmatter from 'remark-frontmatter'
-import remarkParse from 'remark-parse'
-import { unified } from 'unified'
-import { parse as parseYaml } from 'yaml'
-
 import type { LessonContext } from '@/app/types'
 import type { ValidationItem, ValidationReport } from '@/shared/lib/validation/types'
 
 import type { Lesson01HomeManifest } from './manifest'
-
-type MarkdownNode = {
-  type: string
-  depth?: number
-  value?: string
-  children?: MarkdownNode[]
-}
-
-const parser = unified().use(remarkParse).use(remarkFrontmatter, ['yaml'])
-
-function normalizeText(value: string) {
-  return value.trim().replace(/\s+/g, ' ')
-}
-
-function countMeaningfulCharacters(value: string) {
-  const normalized = normalizeText(value)
-  const stripped = normalized.replace(/[\p{P}\p{S}\s]/gu, '')
-
-  return Array.from(stripped).length
-}
-
-function isMeaningfulText(value: string, placeholder: string, minimumLength = 2) {
-  const normalized = normalizeText(value)
-
-  return normalized !== normalizeText(placeholder) && countMeaningfulCharacters(normalized) >= minimumLength
-}
-
-function getScalarText(value: unknown) {
-  if (typeof value === 'string' || typeof value === 'number') {
-    return normalizeText(String(value))
-  }
-
-  return ''
-}
-
-function extractText(node: MarkdownNode) {
-  return normalizeText(toString(node as never))
-}
+import {
+  extractText,
+  getScalarText,
+  isMeaningfulText,
+  normalizeText,
+  parseFrontmatter,
+  parseMarkdownDocument,
+  type MarkdownNode,
+  splitSlides,
+} from '@/lessons/shared/markdownLesson'
 
 function createPendingDomDetail() {
   return '等待 Slidev 预览启动后返回真实 DOM 检查结果。'
@@ -77,35 +43,11 @@ export function validateLesson01Home(
   context: Omit<LessonContext, 'manifest'> & { manifest: Lesson01HomeManifest },
 ): ValidationReport {
   const markdown = context.files[context.manifest.entryFile] ?? ''
-  const tree = parser.parse(markdown) as { children: MarkdownNode[] }
+  const tree = parseMarkdownDocument(markdown)
   const checkpointMap = new Map(context.manifest.checkpoints.map(checkpoint => [checkpoint.id, checkpoint]))
-
-  let frontmatterText = ''
-  const firstSlideNodes: MarkdownNode[] = []
-
-  for (const node of tree.children) {
-    if (node.type === 'yaml' && !frontmatterText) {
-      frontmatterText = node.value ?? ''
-      continue
-    }
-
-    if (node.type === 'thematicBreak') {
-      break
-    }
-
-    firstSlideNodes.push(node)
-  }
-
-  let frontmatter: Record<string, unknown> = {}
-
-  if (frontmatterText.trim().length > 0) {
-    try {
-      frontmatter = (parseYaml(frontmatterText) as Record<string, unknown> | null) ?? {}
-    }
-    catch {
-      frontmatter = {}
-    }
-  }
+  const { frontmatterText, slides } = splitSlides(tree.children)
+  const firstSlideNodes: MarkdownNode[] = slides[0] ?? []
+  const frontmatter = parseFrontmatter(frontmatterText)
 
   const titleValue = getScalarText(frontmatter.title)
   const layoutValue = typeof frontmatter.layout === 'string' ? normalizeText(frontmatter.layout) : ''

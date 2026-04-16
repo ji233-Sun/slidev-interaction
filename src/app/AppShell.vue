@@ -5,13 +5,37 @@ import MonacoMarkdownEditor from '@/components/MonacoMarkdownEditor.vue'
 import SandboxPreview from '@/components/SandboxPreview.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 
-import { defaultLessonId, getLessonById } from './lessonRegistry'
+import { defaultLessonId, getLessonById, getNextLessonId, getPreviousLessonId, lessons } from './lessonRegistry'
 import { useLessonRuntime } from './useLessonRuntime'
 
-const lesson = getLessonById(defaultLessonId)
+function resolveLessonIdFromLocation() {
+  if (typeof window === 'undefined') {
+    return defaultLessonId
+  }
+
+  const requestedLessonId = new URLSearchParams(window.location.search).get('lesson')
+
+  return getLessonById(requestedLessonId ?? '')?.manifest.id ?? defaultLessonId
+}
+
+function createLessonHref(id: string) {
+  if (typeof window === 'undefined') {
+    return `/?lesson=${id}`
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  params.set('lesson', id)
+
+  return `${window.location.pathname || '/'}?${params.toString()}`
+}
+
+const activeLessonId = resolveLessonIdFromLocation()
+const previousLessonId = getPreviousLessonId(activeLessonId)
+const nextLessonId = getNextLessonId(activeLessonId)
+const lesson = getLessonById(activeLessonId)
 
 if (!lesson) {
-  throw new Error(`Missing lesson registration: ${defaultLessonId}`)
+  throw new Error(`Missing lesson registration: ${activeLessonId}`)
 }
 
 const {
@@ -58,6 +82,29 @@ const saveStateLabel = computed(() => {
 
 <template>
   <div class="app-shell">
+    <header class="lesson-track">
+      <div class="track-copy">
+        <p class="section-kicker">Lesson Track</p>
+        <h1>Slidev Interaction Lab</h1>
+        <p>按顺序完成首页与第二页，逐步把一份完整的演示搭起来。</p>
+      </div>
+
+      <nav class="track-list" aria-label="课程列表">
+        <a
+          v-for="item in lessons"
+          :key="item.manifest.id"
+          :data-lesson-id="item.manifest.id"
+          :href="createLessonHref(item.manifest.id)"
+          class="track-link"
+          :class="{ 'track-link--active': item.manifest.id === manifest.id }"
+        >
+          <span>{{ item.manifest.badge }}</span>
+          <strong>{{ item.manifest.title }}</strong>
+          <small>{{ item.manifest.summary }}</small>
+        </a>
+      </nav>
+    </header>
+
     <main class="ide-layout">
       <aside class="lesson-panel">
         <div class="lesson-scroll">
@@ -128,9 +175,31 @@ const saveStateLabel = computed(() => {
             <strong>{{ completionPercent }}</strong>
             <small>{{ pendingCount === 0 ? '这一关已经完成。' : `还有 ${pendingCount} 项待完成。` }}</small>
           </div>
-          <button type="button" class="next-button" disabled>
-            下一课即将开放
-          </button>
+          <div class="lesson-footer-actions">
+            <a
+              v-if="previousLessonId"
+              :href="createLessonHref(previousLessonId)"
+              class="footer-link secondary-button"
+              data-nav="previous"
+            >
+              返回上一课
+            </a>
+            <span v-else class="footer-link footer-link--disabled secondary-button">
+              当前是第一课
+            </span>
+
+            <a
+              v-if="nextLessonId"
+              :href="createLessonHref(nextLessonId)"
+              class="footer-link next-button"
+              data-nav="next"
+            >
+              进入下一课
+            </a>
+            <span v-else class="footer-link footer-link--disabled next-button">
+              课程已全部开放
+            </span>
+          </div>
         </div>
       </aside>
 
@@ -187,7 +256,86 @@ const saveStateLabel = computed(() => {
 
 <style scoped>
 .app-shell {
+  display: grid;
+  gap: 1rem;
   height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lesson-track {
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem 1.3rem;
+  background: linear-gradient(180deg, rgba(15, 25, 48, 0.96), rgba(9, 16, 31, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.track-copy {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.track-copy h1 {
+  color: var(--color-heading);
+  font-family: "Space Grotesk", "Avenir Next", sans-serif;
+  font-size: clamp(1.55rem, 2vw, 2.1rem);
+  line-height: 1.05;
+}
+
+.track-copy p:last-child {
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+
+.track-list {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.track-link {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.05rem;
+  background: linear-gradient(180deg, rgba(25, 37, 64, 0.96), rgba(20, 31, 56, 0.96));
+  border: 1px solid rgba(163, 166, 255, 0.12);
+  border-radius: 1rem;
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.track-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(163, 166, 255, 0.28);
+}
+
+.track-link--active {
+  border-color: rgba(163, 166, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(163, 166, 255, 0.18);
+}
+
+.track-link span {
+  color: var(--color-secondary);
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.track-link strong {
+  color: var(--color-heading);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.track-link small {
+  color: var(--color-muted);
+  line-height: 1.65;
 }
 
 .ide-layout {
@@ -195,6 +343,7 @@ const saveStateLabel = computed(() => {
   gap: 1.25rem;
   grid-template-columns: minmax(292px, 368px) minmax(0, 1fr) minmax(340px, 430px);
   height: 100%;
+  min-height: 0;
 }
 
 .lesson-panel,
@@ -429,13 +578,32 @@ const saveStateLabel = computed(() => {
   color: var(--color-muted);
 }
 
+.lesson-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.footer-link {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.footer-link--disabled {
+  cursor: default;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .next-button {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dim));
   border: 0;
   border-radius: 0.9rem;
   color: #09071d;
   font-weight: 700;
-  opacity: 0.7;
   padding: 0.92rem 1.2rem;
 }
 
@@ -575,11 +743,13 @@ const saveStateLabel = computed(() => {
     flex-direction: column;
   }
 
+  .lesson-footer-actions,
   .editor-head-actions,
   .editor-footer-actions {
     width: 100%;
   }
 
+  .footer-link,
   .next-button,
   .secondary-button,
   .primary-button {
