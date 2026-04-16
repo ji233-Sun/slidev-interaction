@@ -1,30 +1,17 @@
-export interface SlidevLessonCheckpoint {
-  id: string
-  label: string
-  description: string
-  source: 'ast' | 'dom'
+import type { LessonManifest } from '@/app/types'
+
+export interface Lesson01Placeholders {
+  deckTitle: string
+  pageTitle: string
+  subtitle: string
 }
 
-export interface SlidevLessonTask {
-  id: string
-  storageKey: string
-  title: string
-  badge: string
-  summary: string
-  objective: string
-  instructions: string[]
-  hints: string[]
-  checkpoints: SlidevLessonCheckpoint[]
-  starterCode: string
-  placeholders: {
-    deckTitle: string
-    pageTitle: string
-    subtitle: string
-  }
+export interface Lesson01HomeManifest extends LessonManifest {
+  placeholders: Lesson01Placeholders
 }
 
-export const slidevHomeTask: SlidevLessonTask = {
-  id: 'slidev-home-mvp',
+export const lesson01HomeManifest: Lesson01HomeManifest = {
+  id: 'lesson-01-home',
   storageKey: 'slidev-home-mvp-draft',
   title: '制作 Slidev 的第一页（首页）',
   badge: 'Lesson 01',
@@ -79,7 +66,8 @@ export const slidevHomeTask: SlidevLessonTask = {
       source: 'dom',
     },
   ],
-  starterCode: `---
+  starterFiles: {
+    'slides.md': `---
 theme: default
 title: 请填写演示文稿标题
 layout: cover
@@ -91,6 +79,8 @@ transition: fade
 
 请用一句话说明这份 Slidev 想解决什么问题
 `,
+  },
+  entryFile: 'slides.md',
   placeholders: {
     deckTitle: '请填写演示文稿标题',
     pageTitle: '请填写首页标题',

@@ -3,7 +3,8 @@ import { WebContainer } from '@webcontainer/api'
 import type { FileSystemTree, WebContainer as WebContainerInstance, WebContainerProcess } from '@webcontainer/api'
 import type { Ref } from 'vue'
 
-import type { PreviewDomSnapshot } from '@/lib/validation/slidevHomeValidator'
+import type { PreviewDomSnapshot } from '@/shared/lib/validation/types'
+import { buildFileSystemTree } from '@/shared/lib/sandbox/buildFileSystemTree'
 
 const DEV_SERVER_PORT = 3030
 const PREVIEW_SOURCE = 'slidev-interaction-preview'
@@ -130,24 +131,12 @@ onBeforeUnmount(() => {
 `
 }
 
-function createSandboxFiles(markdown: string): FileSystemTree {
-  return {
-    'package.json': {
-      file: {
-        contents: createSandboxPackageJson(),
-      },
-    },
-    'slides.md': {
-      file: {
-        contents: markdown,
-      },
-    },
-    'global-bottom.vue': {
-      file: {
-        contents: createGlobalBottomComponent(),
-      },
-    },
-  }
+function createSandboxFiles(files: Record<string, string>): FileSystemTree {
+  return buildFileSystemTree({
+    'package.json': createSandboxPackageJson(),
+    'global-bottom.vue': createGlobalBottomComponent(),
+    ...files,
+  })
 }
 
 function getWebContainer() {
@@ -158,7 +147,10 @@ function getWebContainer() {
   return bootPromise
 }
 
-export function useSlidevSandbox(markdown: Ref<string>) {
+export function useSlidevSandbox(
+  files: Ref<Record<string, string>>,
+  entryFile: Ref<string>,
+) {
   const canUseWebContainer = typeof window !== 'undefined' && window.crossOriginIsolated
 
   const logs = ref<SandboxLogEntry[]>([])
@@ -344,12 +336,14 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     )
   }
 
-  async function syncSlideMarkdown(value: string) {
-    if (!container || !projectMounted) {
+  async function syncWorkspaceFiles(nextFiles: Record<string, string>) {
+    if (!container) {
       return
     }
 
-    await container.fs.writeFile('/slides.md', value)
+    for (const [path, contents] of Object.entries(nextFiles)) {
+      await container.fs.writeFile(path, contents)
+    }
   }
 
   async function syncSandboxSupportFiles() {
@@ -418,13 +412,13 @@ export function useSlidevSandbox(markdown: Ref<string>) {
         }
 
         if (!projectMounted) {
-          await container.mount(createSandboxFiles(markdown.value))
+          await container.mount(createSandboxFiles(files.value))
           projectMounted = true
           appendLog('system', '已挂载内置 Slidev 工程文件。', 'success')
         }
         else {
           await syncSandboxSupportFiles()
-          await syncSlideMarkdown(markdown.value)
+          await syncWorkspaceFiles(files.value)
           appendLog('system', '已刷新沙箱配置文件。')
         }
 
@@ -451,7 +445,9 @@ export function useSlidevSandbox(markdown: Ref<string>) {
         attachProcessOutput(process, 'slidev')
         watchDevProcess(process)
 
-        await syncSlideMarkdown(markdown.value)
+        await syncWorkspaceFiles({
+          [entryFile.value]: files.value[entryFile.value] ?? '',
+        })
       }
       catch (error) {
         status.value = 'error'
@@ -491,7 +487,7 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     }
   })
 
-  watch(markdown, (value) => {
+  watch(files, (value) => {
     if (!projectMounted) {
       return
     }
@@ -501,8 +497,8 @@ export function useSlidevSandbox(markdown: Ref<string>) {
     }
 
     syncTimer = window.setTimeout(() => {
-      void syncSlideMarkdown(value)
-      appendLog('system', '已同步 slides.md 到 WebContainer。')
+      void syncWorkspaceFiles(value)
+      appendLog('system', '已同步课程工作区到 WebContainer。')
       refreshPreviewFrame()
 
       if (!devProcess && !isBusy.value) {
@@ -510,7 +506,7 @@ export function useSlidevSandbox(markdown: Ref<string>) {
         void ensureStarted()
       }
     }, 350)
-  })
+  }, { deep: true })
 
   return {
     canUseWebContainer,

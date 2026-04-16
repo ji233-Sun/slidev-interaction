@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ValidationReport } from '@/lib/validation/slidevHomeValidator'
+import type { ValidationReport } from '@/shared/lib/validation/types'
 
 defineProps<{
   report: ValidationReport

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import type { SandboxLogEntry } from '@/composables/useSlidevSandbox'
+import type { SandboxLogEntry } from '@/shared/composables/useSlidevSandbox'
 
 const props = defineProps<{
   canUseWebContainer: boolean

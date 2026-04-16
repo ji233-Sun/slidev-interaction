@@ -1,4 +1,9 @@
 export interface DraftRecord {
+  files: Record<string, string>
+  updatedAt: string
+}
+
+export interface LegacyDraftRecord {
   content: string
   updatedAt: string
 }
@@ -51,7 +56,7 @@ export function createDraftStorage(storageKey: string) {
     const store = transaction.objectStore(STORE_NAME)
     const record = await promisifyRequest(store.get(storageKey))
 
-    return (record as DraftRecord | undefined) ?? null
+    return (record as DraftRecord | LegacyDraftRecord | undefined) ?? null
   }
 
   async function setToIndexedDb(record: DraftRecord) {
@@ -71,7 +76,7 @@ export function createDraftStorage(storageKey: string) {
   }
 
   return {
-    async get(): Promise<DraftRecord | null> {
+    async get(): Promise<DraftRecord | LegacyDraftRecord | null> {
       try {
         return await getFromIndexedDb()
       }
@@ -82,7 +87,7 @@ export function createDraftStorage(storageKey: string) {
           return null
         }
 
-        return JSON.parse(raw) as DraftRecord
+        return JSON.parse(raw) as DraftRecord | LegacyDraftRecord
       }
     },
     async set(record: DraftRecord) {
